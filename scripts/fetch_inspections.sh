@@ -3,6 +3,7 @@
 # Data source: NYC Open Data p937-wjvj (Rodent Inspection), inspection_type='Initial' (~2.12M rows)
 # Note: dataset contains junk dates (1918..2045); filtered downstream in aggregation.
 set -euo pipefail
+mkdir -p "$(dirname "$0")/../data"
 cd "$(dirname "$0")/../data"
 out=inspections_initial.csv
 : > "$out"

@@ -1,6 +1,6 @@
-# Where the rats are
+# Where the rats are (and were)
 
-Interactive map and analysis of every rat sighting reported to New York City's 311 line since 2010 — 289,292 reports — checked against 2.1 million health department rodent inspections.
+Interactive map and analysis of every rat sighting reported to New York City's 311 line since 2010 — 289,292 reports — checked against 2.1 million health department rodent inspections. Includes an address lookup that reports what has happened within a short walk of any New York City address.
 
 **Live site:** https://vitalcity-nyc.github.io/rat-map/
 
@@ -12,7 +12,13 @@ A Vital City data project.
 - `docs/data/` — aggregated JSON consumed by the site, produced by `scripts/aggregate.py`
 - `scripts/fetch_311.sh` — downloads rat sightings from NYC Open Data (311 datasets `76ig-c548` and `erm2-nwe9`, filtered to complaint type "Rodent," descriptor "Rat Sighting")
 - `scripts/fetch_inspections.sh` — downloads all initial rodent inspections from DOHMH dataset `p937-wjvj`
-- `scripts/aggregate.py` — produces every number on the site from the raw downloads; asserts expected row counts at each step and fails loudly on empty fetches
+- `scripts/fetch_reference.sh` — downloads district and neighborhood boundaries plus 2020 census populations
+- `scripts/aggregate.py` — produces every number on the site from the raw downloads; asserts row-count floors at each step and fails loudly on short or empty fetches
+- `.github/workflows/weekly-update.yml` — refreshes the data every Monday morning and commits `docs/data` only when something changed
+
+## How the weekly refresh stays correct
+
+`aggregate.py` derives every reporting window from the data itself: the last complete month, the year-to-date comparison window, the year range, the rolling 12- and 36-month windows, and the wording of every date in the page copy (the HTML carries `{{TOKEN}}` placeholders that the page fills from `summary.json`). Nothing needs editing as time passes — when August completes, the year-to-date comparison becomes January–August on its own.
 
 Raw downloads land in `data/` (git-ignored; ~250 MB).
 

@@ -4,6 +4,7 @@
 # Filter: complaint_type='Rodent' AND descriptor='Rat Sighting'
 # Fails loud: any empty page before expected end, or totals far below known counts, exits 1.
 set -euo pipefail
+mkdir -p "$(dirname "$0")/../data"
 cd "$(dirname "$0")/../data"
 
 FIELDS="unique_key,created_date,latitude,longitude,community_board,borough,incident_zip,location_type,incident_address"

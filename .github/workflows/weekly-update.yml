@@ -1,0 +1,77 @@
+name: Weekly data refresh
+
+# Rebuilds every figure on the site from NYC Open Data. The aggregation script derives all
+# reporting windows from the data itself, so nothing here needs editing as time passes.
+# It fails loudly: a short or empty fetch aborts the run and leaves the published data alone.
+
+on:
+  schedule:
+    - cron: '20 11 * * 1'      # Mondays, 11:20 UTC (about 7:20 a.m. New York in summer)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rat-map-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install --quiet shapely openpyxl
+
+      - name: Fetch 311 rat sightings
+        run: scripts/fetch_311.sh
+
+      - name: Fetch DOHMH rodent inspections
+        run: scripts/fetch_inspections.sh
+
+      - name: Fetch boundaries and populations
+        run: scripts/fetch_reference.sh
+
+      - name: Rebuild site data
+        run: python3 scripts/aggregate.py
+
+      - name: Commit if the data changed
+        run: |
+          set -euo pipefail
+          git config user.name "vitalcity-nyc"
+          git config user.email "vitalcity-nyc@users.noreply.github.com"
+          if git diff --quiet -- docs/data; then
+            echo "No change in published data; nothing to commit."
+            exit 0
+          fi
+          THROUGH=$(python3 -c "import json;print(json.load(open('docs/data/summary.json'))['last_data_date'])")
+          TOTAL=$(python3 -c "import json;print(f\"{json.load(open('docs/data/summary.json'))['total_sightings']:,}\")")
+          git add docs/data
+          git commit -m "Weekly refresh: data through ${THROUGH} (${TOTAL} sightings)"
+          git push
+
+      - name: Summarize the run
+        if: always()
+        run: |
+          if [ -f docs/data/summary.json ]; then
+            python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          s = json.load(open('docs/data/summary.json'))
+          months, mc = s['months'], s['monthly_city']
+          cur = s['years'][-1]; end = s['ytd_end_month']
+          tot = lambda y: sum(n for m, n in zip(months, mc) if m.startswith(str(y)) and int(m[5:7]) <= end)
+          a, b = tot(cur), tot(cur - 1)
+          print(f"### Rat map refresh\n")
+          print(f"- Data through **{s['last_data_date']}**")
+          print(f"- Total sightings: **{s['total_sightings']:,}**")
+          print(f"- {s['ytd_label']} {cur}: **{a:,}** vs {b:,} in {cur-1} "
+                f"(**{(a/b-1)*100:+.1f}%**)" if b else "")
+          PY
+          fi

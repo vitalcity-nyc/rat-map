@@ -15,14 +15,28 @@ const BORO_COLOR = {MANHATTAN:C.orange, BRONX:C.magenta, BROOKLYN:C.indigo, QUEE
 const fmt = n => n.toLocaleString('en-US');
 const pct = (x, d=1) => (x>0?'+':'') + x.toFixed(d) + '%';
 
-// verified policy timeline (see Methodology for sources)
+// Policy timeline. Every date is sourced to a City Hall or DSNY announcement; see the
+// methodology section of index.html for the citation behind each one.
 const EVENTS = [
-  {ym:'2020-03', label:'Pandemic begins'},
-  {ym:'2023-04', label:'Rat czar named; 8 p.m. set-out'},
-  {ym:'2023-09', label:'Food businesses containerize'},
-  {ym:'2024-03', label:'All businesses containerize'},
-  {ym:'2024-11', label:'Bins required, 1–9 unit homes'},
-  {ym:'2025-06', label:'West Harlem fully containerized'}
+  {ym:'2017-07', date:'July 2017', label:'De Blasio’s $32 million rat reduction plan targets three neighborhoods'},
+  {ym:'2020-03', date:'March 2020', label:'Pandemic begins'},
+  {ym:'2023-04', date:'April 2023', label:'Rat czar named; bagged trash cannot go out before 8 p.m.'},
+  {ym:'2023-08', date:'Aug. 2023', label:'Food businesses must containerize; chains follow in September'},
+  {ym:'2024-03', date:'March 2024', label:'All businesses must containerize'},
+  {ym:'2024-10', date:'Oct. 2024', label:'Curbside composting reaches all five boroughs'},
+  {ym:'2024-11', date:'Nov. 2024', label:'Lidded bins required for 1–9 unit homes'},
+  {ym:'2025-04', date:'April 2025', label:'Food scraps must be separated from trash, on pain of a fine'},
+  {ym:'2025-06', date:'June 2025', label:'West Harlem becomes the first fully containerized district'},
+  {ym:'2026-04', date:'April 2026', label:'Mamdani names six more districts to containerize by 2027'},
+  {ym:'2026-06', date:'June 2026', label:'Official NYC Bins required for 1–9 unit homes'}
+];
+
+// Residential containerization by community district, verified against City Hall and DSNY.
+// As of Aug. 2026 exactly one district is fully containerized; Brooklyn 2 is mid-rollout.
+// Districts merely announced (target end of 2027) are named in the note, not badged as done.
+const CONTAINERIZED = [
+  {cd:'109', year:2025, name:'West Harlem', sub:'first district fully containerized'},
+  {cd:'302', year:2026, name:'Downtown Brooklyn', sub:'containerizing now'}
 ];
 
 if (new URLSearchParams(location.search).get('embed') === '1') {
@@ -45,20 +59,74 @@ function main([S, CD, NTA, HEX, PTS, CDGJ, NTAGJ]) {
 
   // ---------- helpers over summary ----------
   const months = S.months, mc = S.monthly_city;
-  const janjul = y => months.reduce((a,m,i) => a + (m.startsWith(String(y)) && +m.slice(5,7) <= 7 ? mc[i] : 0), 0);
-  const jj26 = janjul(2026), jj25 = janjul(2025);
-  const yoy26 = (jj26/jj25 - 1) * 100;
-  const insp26 = S.insp_city_year['2026'];
+  const CUR = S.years[S.years.length-1], PREV = CUR - 1;
+  const YTD = S.ytd_label;                       // e.g. "Jan.\u2013July"
+  const ytdSum = y => months.reduce((a,m,i) => a + (m.startsWith(String(y)) && +m.slice(5,7) <= S.ytd_end_month ? mc[i] : 0), 0);
+  const ytdCur = ytdSum(CUR), ytdPrev = ytdSum(PREV);
+  const yoyCur = (ytdCur/ytdPrev - 1) * 100;
+  const inspCur = S.insp_city_year[String(CUR)];
+  // biggest year-over-year drop on record? checked, not asserted
+  const allYoY = S.years.slice(1).map(y => { const a = ytdSum(y), b = ytdSum(y-1); return b ? (a/b-1)*100 : 0; });
+  const isRecordDrop = yoyCur <= Math.min(...allYoY) + 1e-9;
+  const inspPeak = Object.entries(S.insp_city_year).filter(([y,v]) => v[0] > 20000)
+    .reduce((best, [y,v]) => (v[1]/v[0] > best.r ? {y, r: v[1]/v[0]} : best), {y:null, r:0});
   document.getElementById('data-through').textContent = new Date(S.last_data_date + 'T12:00:00')
     .toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'});
+
+  // ---------- fill dated copy from the data so weekly rebuilds stay accurate ----------
+  (function fillTokens() {
+    const MON_LONG = ['January','February','March','April','May','June','July',
+                      'August','September','October','November','December'];
+    const MON_AB = ['Jan.','Feb.','March','April','May','June','July','Aug.','Sept.','Oct.','Nov.','Dec.'];
+    const longDate = iso => `${MON_LONG[+iso.slice(5,7)-1]} ${+iso.slice(8,10)}, ${iso.slice(0,4)}`;
+    const abDate = iso => `${MON_AB[+iso.slice(5,7)-1]} ${+iso.slice(8,10)}, ${iso.slice(0,4)}`;
+    const monthLabel = (ym, long) => `${(long?MON_LONG:MON_AB)[+ym.slice(5,7)-1]} ${ym.slice(0,4)}`;
+    const p1 = (n, d) => (n/d*100).toFixed(1) + '%';
+    const T = {
+      ACCESSED: abDate(S.generated),
+      ACCESSED_LONG: longDate(S.generated),
+      LAST_DATA: longDate(S.last_data_date),
+      PARTIAL: S.partial_year_note,
+      CUR: CUR, PREV: PREV,
+      YTD: YTD,
+      YTD_LONG: `January–${MON_LONG[S.ytd_end_month-1]}`,
+      LAST_MONTH: monthLabel(S.last_complete_month, true),
+      LAST_MONTH_NAME: MON_LONG[+S.last_complete_month.slice(5,7)-1],
+      LAST_COMPLETE_YEAR: S.last_complete_year,
+      CHRONIC_WINDOW: `${monthLabel(S.chronic_window[0], true)} – ${monthLabel(S.chronic_window[1], true)}`,
+      N_OLD: fmt(S.file_counts['2010_2019']),
+      N_NEW: fmt(S.file_counts['2020_present']),
+      N_INSP: fmt(S.total_inspections),
+      PCT_NOCOORD: p1(S.no_coord, S.total_sightings),
+      PCT_NOCB: Math.round(S.no_cb/S.total_sightings*100) + '%',
+      N_BADDATE: fmt(S.insp_bad_date), PCT_BADDATE: p1(S.insp_bad_date, S.total_inspections),
+      N_INSPNOCOORD: fmt(S.insp_no_coord), PCT_INSPNOCOORD: p1(S.insp_no_coord, S.total_inspections),
+      N_MIDNIGHT: fmt(S.hourly_excluded_midnight),
+      PCT_MIDNIGHT: Math.round(S.hourly_excluded_midnight/S.total_sightings*100) + '%'
+    };
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    const hits = [];
+    while (walker.nextNode()) if (walker.currentNode.nodeValue.includes('{{')) hits.push(walker.currentNode);
+    hits.forEach(n => {
+      n.nodeValue = n.nodeValue.replace(/\{\{(\w+)\}\}/g, (m, k) => (k in T ? String(T[k]) : m));
+    });
+    document.querySelectorAll('.partial-note').forEach(el => { el.textContent = S.partial_year_note + '.'; });
+    const slider = document.getElementById('year-slider');
+    slider.max = String(CUR); slider.value = String(CUR);
+    document.getElementById('year-label').textContent = String(CUR);
+    const mn = document.getElementById('midnight-note');
+    if (mn) mn.textContent = `${fmt(S.hourly_excluded_midnight)} records (${T.PCT_MIDNIGHT} of all sightings) carry no time of day and are excluded here.`;
+  })();
 
   // ---------- KPIs ----------
   const chron1 = S.chronic[0];
   document.getElementById('kpis').innerHTML = [
-    {n: fmt(jj26), l:'rat sightings reported, Jan.–Jul. 2026'},
-    {n: pct(yoy26), l:'vs. Jan.–Jul. 2025 — the largest drop on record', cls:'down'},
-    {n: (insp26[1]/insp26[0]*100).toFixed(1) + '%', l:'of 2026 initial inspections found rat signs (23% in 2022)'},
-    {n: fmt(chron1.n), l:'reports in 3 years at ' + chron1.address + ', the Bronx'}
+    {n: fmt(ytdCur), l:`rat sightings reported, ${YTD} ${CUR}`},
+    {n: pct(yoyCur), l:`vs. ${YTD} ${PREV}${isRecordDrop ? ' \u2014 the largest drop on record' : ''}`,
+     cls: yoyCur < 0 ? 'down' : 'up'},
+    {n: (inspCur[1]/inspCur[0]*100).toFixed(1) + '%',
+     l:`of ${CUR} initial inspections found rat signs (${(inspPeak.r*100).toFixed(0)}% in ${inspPeak.y})`},
+    {n: fmt(chron1.n), l:`reports in 3 years at ${chron1.address}, ${chron1.borough === 'Bronx' ? 'the Bronx' : chron1.borough}`}
   ].map(k => `<div class="kpi"><div class="n ${k.cls||''}">${k.n}</div><div class="l">${k.l}</div></div>`).join('');
 
   // ---------- SVG chart helpers ----------
@@ -89,7 +157,7 @@ function main([S, CD, NTA, HEX, PTS, CDGJ, NTAGJ]) {
 
   function renderTrend() {
     trendBox.innerHTML = '';
-    const W=1000, H=440, L=64, R=20, TOP=24, B=46;
+    const W=1000, H=470, L=64, R=20, ANN_ROWS=[34, 11], TOP=68, B=46;
     const svg = svgEl(W,H); trendBox.appendChild(svg);
     const x = i => L + (W-L-R) * i / (months.length-1);
     let series, maxV;
@@ -109,19 +177,25 @@ function main([S, CD, NTA, HEX, PTS, CDGJ, NTAGJ]) {
     const ticks = []; for (let v=0; v<=maxV*1.02; v+=step) ticks.push(v);
     grid(svg, L, W-R, y, ticks, v => perCap && trendView==='boro' ? v : fmt(v));
     // x labels: every 2 years
-    for (let yr=2010; yr<=2026; yr+=2) {
+    for (let yr=2010; yr<=CUR; yr+=2) {
       const i = months.indexOf(yr+'-01'); if (i<0) continue;
       txt(svg, x(i), H-B+20, String(yr), {anchor:'middle', size:12});
       put(svg,'line',{x1:x(i),x2:x(i),y1:H-B,y2:H-B+5,stroke:C.charcoal,'stroke-width':1});
     }
     put(svg,'line',{x1:L,x2:W-R,y1:y(0),y2:y(0),stroke:C.black,'stroke-width':1.2});
-    // event annotations
-    EVENTS.forEach(ev => {
+    // Event annotations: numbered markers in a band above the plot, keyed below the chart.
+    // Markers closer together than one badge width move up a row so they never overlap.
+    const placed = ANN_ROWS.map(() => []);
+    EVENTS.forEach((ev,n) => {
       const i = months.indexOf(ev.ym); if (i<0) return;
       const ex = x(i);
-      put(svg,'line',{x1:ex,x2:ex,y1:TOP+6,y2:y(0),stroke:C.charcoal,'stroke-width':1,'stroke-dasharray':'2 3'});
-      txt(svg, 0, 0, ev.label, {size:11, fill:C.charcoal,
-        attrs:{transform:`translate(${ex-4},${TOP+10}) rotate(90)`}});
+      let row = placed.findIndex(r => r.every(px => Math.abs(px - ex) >= 23));
+      if (row < 0) row = ANN_ROWS.length - 1;
+      placed[row].push(ex);
+      const cy = ANN_ROWS[row];
+      put(svg,'line',{x1:ex, x2:ex, y1:cy+11, y2:y(0), stroke:C.cloud, 'stroke-width':1, 'stroke-dasharray':'2 4'});
+      put(svg,'circle',{cx:ex, cy:cy, r:9.5, fill:C.black});
+      txt(svg, ex, cy+4, String(n+1), {anchor:'middle', size:11.5, weight:700, fill:C.chartreuse});
     });
     series.forEach(s => {
       let d = '';
@@ -129,19 +203,26 @@ function main([S, CD, NTA, HEX, PTS, CDGJ, NTAGJ]) {
       put(svg,'path',{d, fill:'none', stroke:s.color, 'stroke-width': trendView==='city'?2:2.2, 'stroke-linejoin':'round'});
     });
     if (trendView === 'boro') {
-      let lx = L+10;
+      let lx = L;
       series.forEach(s => {
-        put(svg,'rect',{x:lx, y:TOP-14, width:16, height:5, fill:s.color});
-        const t = txt(svg, lx+21, TOP-8, s.label, {size:12.5, weight:700, fill:C.black});
+        put(svg,'rect',{x:lx, y:TOP-26, width:16, height:5, fill:s.color});
+        txt(svg, lx+21, TOP-20, s.label, {size:12.5, weight:700, fill:C.black});
         lx += 21 + s.label.length*7.2 + 24;
       });
     } else {
-      // label the peak
+      // label the peak, offset away from the line
       const mi = mc.indexOf(Math.max(...mc));
-      txt(svg, x(mi), y(mc[mi])-8, months[mi].slice(0,4)+'-'+months[mi].slice(5)+': '+fmt(mc[mi]), {anchor:'middle', size:12, weight:700, fill:C.orange});
+      const MON = ['Jan.','Feb.','March','April','May','June','July','Aug.','Sept.','Oct.','Nov.','Dec.'];
+      const lbl = `Peak: ${fmt(mc[mi])} in ${MON[+months[mi].slice(5,7)-1]} ${months[mi].slice(0,4)}`;
+      txt(svg, x(mi)+10, y(mc[mi])-10, lbl, {anchor:'start', size:12.5, weight:700, fill:C.orange});
     }
-    txt(svg, L, H-6, trendView==='boro' ? (perCap?'12-month rolling average per 100,000 residents':'12-month rolling average') : 'Sightings per month', {size:11.5});
+    txt(svg, L, H-6, trendView==='boro' ? (perCap?'12-month rolling average per 100,000 residents':'12-month rolling average of sightings per month') : 'Sightings per month', {size:11.5});
   }
+  function renderEventKey() {
+    document.getElementById('event-key').innerHTML = EVENTS.map((ev,n) =>
+      `<div class="ek"><span class="ek-n">${n+1}</span><span class="ek-t"><b>${ev.date}</b> ${ev.label}</span></div>`).join('');
+  }
+  renderEventKey();
   renderTrend();
   document.getElementById('trend-seg').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
@@ -169,10 +250,10 @@ function main([S, CD, NTA, HEX, PTS, CDGJ, NTAGJ]) {
     years.forEach((yr,i) => {
       const bx = L + i*bw + bw*0.12;
       put(svg,'rect',{x:bx, y:yB(yearly[i]), width:bw*0.76, height:yB(0)-yB(yearly[i]),
-        fill: yr===2026 ? C.ch50 : C.chartreuse, stroke:'none'});
+        fill: yr===CUR ? C.ch50 : C.chartreuse, stroke:'none'});
       txt(svg, L+i*bw+bw/2, H-B+20, String(yr).slice(2), {anchor:'middle', size:12});
     });
-    txt(svg, L, H-B+38, 'Bars: 311 rat sightings per year (2026 through Aug. 4)', {size:12});
+    txt(svg, L, H-B+38, `Bars: 311 rat sightings per year (${S.partial_year_note})`, {size:12});
     put(svg,'rect',{x:L+330, y:H-B+30, width:14, height:10, fill:C.chartreuse});
     // rate line
     let d='';
@@ -183,7 +264,7 @@ function main([S, CD, NTA, HEX, PTS, CDGJ, NTAGJ]) {
       if (rates[i]==null) return;
       const px = L+i*bw+bw/2;
       put(svg,'circle',{cx:px, cy:yR(rates[i]), r:3.2, fill:C.orange});
-      if (yr%2===0 || yr===2025)
+      if (yr%2===0 || yr===CUR-1)
         txt(svg, px, yR(rates[i])-10, rates[i].toFixed(1)+'%', {anchor:'middle', size:11.5, weight:700, fill:C.orange});
     });
     txt(svg, W-R, TOP-10, 'Line: share of initial inspections finding rat signs', {anchor:'end', size:12, weight:700, fill:C.orange});
@@ -194,7 +275,8 @@ function main([S, CD, NTA, HEX, PTS, CDGJ, NTAGJ]) {
   (function() {
     const monthsN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     const tot = Array(12).fill(0), cnt = Array(12).fill(0);
-    months.forEach((m,i) => { const yr=+m.slice(0,4), mo=+m.slice(5,7)-1; if (yr<=2025){ tot[mo]+=mc[i]; cnt[mo]++; }});
+    months.forEach((m,i) => { const yr=+m.slice(0,4), mo=+m.slice(5,7)-1;
+      if (yr<=S.last_complete_year){ tot[mo]+=mc[i]; cnt[mo]++; }});
     const avg = tot.map((t,i)=>t/cnt[i]);
     barChart('season-chart', monthsN, avg, {hl: avg.indexOf(Math.max(...avg)), fmtv: v=>Math.round(v).toLocaleString(), note:'Average sightings per month'});
     const hrs = S.hourly;
@@ -282,7 +364,7 @@ function main([S, CD, NTA, HEX, PTS, CDGJ, NTAGJ]) {
       put(svg,'path',{d:d+'Z', fill:g.color, 'fill-opacity':0.92, stroke:C.white, 'stroke-width':0.6});
       base = top;
     });
-    for (let yr=2010; yr<=2026; yr+=2) {
+    for (let yr=2010; yr<=CUR; yr+=2) {
       const i = years.indexOf(yr);
       txt(svg, x(i), H-B+20, String(yr), {anchor:'middle', size:12});
     }
@@ -311,7 +393,7 @@ function main([S, CD, NTA, HEX, PTS, CDGJ, NTAGJ]) {
     const rows = [];
     for (const [nid, d] of Object.entries(NTA)) {
       if (d.type !== '0' || !d.pop || d.pop < 5000) continue;
-      const n = d.janjul['2026'] || 0;
+      const n = d.ytd[String(CUR)] || 0;
       rows.push({name:d.name, borough:d.borough, n, rate: n/d.pop*10000});
     }
     rows.sort((a,b)=>b.rate-a.rate);
@@ -323,6 +405,238 @@ function main([S, CD, NTA, HEX, PTS, CDGJ, NTAGJ]) {
        <td class="num">${fmt(r.n)}</td></tr>`));
     document.getElementById('rank-tbl').innerHTML = html.join('');
   })();
+
+  // ================= ADDRESS LOOKUP =================
+  // The per-block file is the largest asset on the page and only this section needs it,
+  // so it loads on first use rather than blocking the map and charts.
+  let RAD = null, rLat = null, rLon = null, radPromise = null;
+  function ensureRadiusData() {
+    if (radPromise) return radPromise;
+    radPromise = load('radius.json').then(d => {
+      RAD = d;
+      rLat = new Float64Array(d.dlat.length); rLon = new Float64Array(d.dlat.length);
+      let cum = 0;
+      for (let i = 0; i < d.dlat.length; i++) {
+        cum += d.dlat[i];
+        rLat[i] = d.lat0 + cum * d.lat_step;
+        rLon[i] = d.lon0 + d.lon[i] * d.lon_step;
+      }
+      return d;
+    }).catch(e => { radPromise = null; throw e; });
+    return radPromise;
+  }
+
+  const addrInput = document.getElementById('addr');
+  const acList = document.getElementById('ac-list');
+  const lrBox = document.getElementById('lookup-result');
+  let acItems = [], acIdx = -1, acTimer = null, acSeq = 0;
+  let lrRadius = 400, lrPick = null, lrMap = null;
+
+  function acClose() { acList.hidden = true; acList.innerHTML = ''; acItems = []; acIdx = -1;
+    addrInput.setAttribute('aria-expanded','false'); }
+  function acMsg(text) {
+    acList.innerHTML = `<li class="ac-msg">${text}</li>`; acList.hidden = false; acItems = []; acIdx = -1;
+  }
+  function acRender(feats, typed) {
+    acItems = feats;
+    acList.innerHTML = feats.map((f,i) => {
+      const lab = f.properties.label || '';
+      const cut = lab.toLowerCase().indexOf(typed.toLowerCase());
+      const html = cut === 0
+        ? `<span class="ac-b">${lab.slice(0, typed.length)}</span>${lab.slice(typed.length)}`
+        : lab;
+      return `<li role="option" data-i="${i}">${html}</li>`;
+    }).join('');
+    acList.hidden = false;
+    addrInput.setAttribute('aria-expanded','true');
+  }
+  addrInput.addEventListener('focus', () => { ensureRadiusData().catch(() => {}); });
+  addrInput.addEventListener('input', () => {
+    ensureRadiusData().catch(() => {});
+    const q = addrInput.value.trim();
+    clearTimeout(acTimer);
+    if (q.length < 3) { acClose(); return; }
+    acTimer = setTimeout(() => {
+      const seq = ++acSeq;
+      fetch('https://geosearch.planninglabs.nyc/v2/autocomplete?size=6&text=' + encodeURIComponent(q))
+        .then(r => r.json())
+        .then(d => {
+          if (seq !== acSeq) return;                       // a newer keystroke superseded this one
+          const feats = (d.features || []).filter(f => f.geometry && f.geometry.coordinates);
+          if (!feats.length) { acMsg('No matching New York City address'); return; }
+          acRender(feats, q);
+        })
+        .catch(() => { if (seq === acSeq) acMsg('Address lookup is unavailable right now'); });
+    }, 180);
+  });
+  addrInput.addEventListener('keydown', e => {
+    if (acList.hidden || !acItems.length) {
+      if (e.key === 'Enter' && addrInput.value.trim().length >= 3) e.preventDefault();
+      return;
+    }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      acIdx = (acIdx + (e.key === 'ArrowDown' ? 1 : -1) + acItems.length) % acItems.length;
+      [...acList.children].forEach((li,i) => li.classList.toggle('sel', i === acIdx));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      pickAddress(acItems[acIdx < 0 ? 0 : acIdx]);
+    } else if (e.key === 'Escape') { acClose(); }
+  });
+  acList.addEventListener('click', e => {
+    const li = e.target.closest('li[data-i]'); if (!li) return;
+    pickAddress(acItems[+li.dataset.i]);
+  });
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.ac-wrap')) acClose();
+  });
+  document.getElementById('radius-seg').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    lrRadius = +b.dataset.r;
+    document.querySelectorAll('#radius-seg button').forEach(x => x.classList.toggle('on', x === b));
+    if (lrPick) renderLookup();
+  });
+  document.getElementById('lr-clear').addEventListener('click', () => {
+    lrPick = null; lrBox.hidden = true; addrInput.value = ''; acClose(); addrInput.focus();
+  });
+
+  function pickAddress(f) {
+    if (!f) return;
+    const [lon, lat] = f.geometry.coordinates;
+    lrPick = {lat, lon, label: f.properties.label || f.properties.name || 'Selected address',
+              name: f.properties.name || '', boro: f.properties.borough || f.properties.locality || ''};
+    addrInput.value = lrPick.label;
+    acClose();
+    const hint = document.getElementById('lookup-hint');
+    const hintText = hint.textContent;
+    hint.textContent = 'Counting sightings near that address\u2026';
+    ensureRadiusData()
+      .then(() => { hint.textContent = hintText; renderLookup(); })
+      .catch(() => { hint.textContent = 'The block-level data could not be loaded. Please reload the page and try again.'; });
+  }
+
+  // Sightings within `radius` metres of (lat, lon): full-year counts and, separately,
+  // counts inside the year-to-date window so partial years compare like with like.
+  function radiusCounts(lat, lon, radius) {
+    const latRad = lat * Math.PI / 180;
+    const mPerLat = 111132, mPerLon = 111320 * Math.cos(latRad);
+    const dLat = radius / mPerLat, dLon = radius / mPerLon;
+    const byYear = new Array(RAD.years.length).fill(0);
+    const ytdByYear = new Array(RAD.years.length).fill(0);
+    let total = 0;
+    for (let i = 0; i < rLat.length; i++) {
+      const la = rLat[i];
+      if (la < lat - dLat || la > lat + dLat) continue;
+      const lo = rLon[i];
+      if (lo < lon - dLon || lo > lon + dLon) continue;
+      const dy = (la - lat) * mPerLat, dx = (lo - lon) * mPerLon;
+      if (dx*dx + dy*dy > radius*radius) continue;
+      byYear[RAD.yr[i]] += RAD.cnt[i];
+      ytdByYear[RAD.yr[i]] += RAD.ycnt[i];
+      total += RAD.cnt[i];
+    }
+    return {byYear, ytdByYear, total};
+  }
+
+  function renderLookup() {
+    const {lat, lon} = lrPick;
+    const {byYear, ytdByYear, total} = radiusCounts(lat, lon, lrRadius);
+    const yrs = RAD.years;
+    // year-to-date comparison uses the same Jan-to-last-complete-month window as the rest of the page
+    const ytdCurLocal = ytdByYear[yrs.indexOf(CUR)], ytdPrevLocal = ytdByYear[yrs.indexOf(PREV)];
+    const blockYoY = ytdPrevLocal >= 3 ? (ytdCurLocal/ytdPrevLocal - 1) * 100 : null;
+    const cityYoY = yoyCur;
+    lrBox.hidden = false;
+    document.getElementById('lr-addr').textContent = lrPick.label;
+    document.getElementById('lr-sub').textContent =
+      `Within ${lrRadius} metres (about a ${lrRadius <= 250 ? '3' : lrRadius <= 400 ? '5' : '10'}-minute walk) · ${fmt(total)} sightings since 2010`;
+
+    const stats = [
+      {n: fmt(ytdCurLocal), l: `sightings, ${YTD} ${CUR}`},
+      {n: blockYoY == null ? '—' : pct(blockYoY, 0), cls: blockYoY == null ? '' : blockYoY < 0 ? 'down' : 'up',
+       l: `vs. ${YTD} ${PREV}`},
+      {n: pct(cityYoY, 0), cls: cityYoY < 0 ? 'down' : 'up', l: `citywide over the same window`}
+    ];
+    document.getElementById('lr-stats').innerHTML = stats.map(s =>
+      `<div class="lr-stat"><div class="n ${s.cls||''}">${s.n}</div><div class="l">${s.l}</div></div>`).join('');
+
+    // yearly bar chart for the radius
+    const box = document.getElementById('lr-chart'); box.innerHTML = '';
+    const W=620, H=250, L=40, R=12, TOP=26, B=34;
+    const svg = svgEl(W,H); box.appendChild(svg);
+    const maxV = Math.max(...byYear, 1);
+    const yS = v => TOP + (H-TOP-B) * (1 - v/(maxV*1.15));
+    const bw = (W-L-R)/yrs.length;
+    [0, Math.round(maxV/2), maxV].filter((v,i,a) => a.indexOf(v)===i).forEach(v => {
+      put(svg,'line',{x1:L, x2:W-R, y1:yS(v), y2:yS(v), stroke:C.cloud});
+      txt(svg, L-7, yS(v)+4, fmt(v), {anchor:'end', size:11});
+    });
+    yrs.forEach((yr,i) => {
+      const v = byYear[i];
+      put(svg,'rect',{x:L+i*bw+bw*0.12, y:yS(v), width:bw*0.76, height:yS(0)-yS(v),
+        fill: yr===CUR ? C.orange : C.chartreuse});
+      if (v > 0) txt(svg, L+i*bw+bw/2, yS(v)-5, fmt(v), {anchor:'middle', size:10.5,
+        weight: yr===CUR?700:300, fill: yr===CUR?C.orange:C.charcoal});
+      if (yr%2===0 || yr===CUR) txt(svg, L+i*bw+bw/2, H-B+16, String(yr).slice(2), {anchor:'middle', size:11});
+    });
+    put(svg,'line',{x1:L, x2:W-R, y1:yS(0), y2:yS(0), stroke:C.black,'stroke-width':1.2});
+    txt(svg, L, H-6, `Sightings per year within ${lrRadius} m (${CUR} is partial)`, {size:11});
+
+    drawLookupMap();
+  }
+  function drawLookupMap() {
+    const {lat, lon} = lrPick;
+    if (!lrMap) {
+      lrMap = new maplibregl.Map({
+        container: 'lr-map', style: mapStyle(), center: [lon, lat], zoom: 14.4,
+        attributionControl: false, dragRotate: false
+      });
+      lrMap.addControl(new maplibregl.NavigationControl({showCompass:false}), 'top-left');
+      lrMap.on('load', () => {
+        lrMap.addSource('lr-pts', {type:'geojson', data:{type:'FeatureCollection', features:[]}});
+        lrMap.addLayer({id:'lr-pts', type:'circle', source:'lr-pts',
+          paint:{'circle-color':C.magenta, 'circle-opacity':0.62,
+            'circle-radius':['interpolate',['linear'],['zoom'], 12, 2.2, 15, 4.5, 17, 8]}});
+        lrMap.addSource('lr-ring', {type:'geojson', data:{type:'FeatureCollection', features:[]}});
+        lrMap.addLayer({id:'lr-ring', type:'line', source:'lr-ring',
+          paint:{'line-color':C.black, 'line-width':2, 'line-dasharray':[2,2]}});
+        new maplibregl.Marker({color: C.orange}).setLngLat([lon, lat]).addTo(lrMap);
+        updateLookupMap();
+      });
+    } else {
+      updateLookupMap();
+    }
+  }
+  function updateLookupMap() {
+    if (!lrMap || !lrMap.getSource('lr-ring')) return;
+    const {lat, lon} = lrPick;
+    lrMap.getSource('lr-ring').setData({type:'FeatureCollection', features:[circleFeature(lat, lon, lrRadius)]});
+    const latRad = lat*Math.PI/180, mPerLat = 111132, mPerLon = 111320*Math.cos(latRad);
+    const near = PTS.filter(p => {
+      const dy=(p[0]-lat)*mPerLat, dx=(p[1]-lon)*mPerLon;
+      return dx*dx+dy*dy <= lrRadius*lrRadius;
+    }).map(p => ({type:'Feature', properties:{}, geometry:{type:'Point', coordinates:[p[1], p[0]]}}));
+    lrMap.getSource('lr-pts').setData({type:'FeatureCollection', features: near});
+    const z = lrRadius <= 250 ? 15.4 : lrRadius <= 400 ? 14.8 : 13.8;
+    lrMap.jumpTo({center:[lon, lat], zoom: z});
+    lrMap.resize();
+  }
+  function circleFeature(lat, lon, r) {
+    const pts = [], latRad = lat*Math.PI/180;
+    for (let i = 0; i <= 64; i++) {
+      const a = i/64 * 2*Math.PI;
+      pts.push([lon + (r*Math.cos(a))/(111320*Math.cos(latRad)), lat + (r*Math.sin(a))/111132]);
+    }
+    return {type:'Feature', properties:{}, geometry:{type:'LineString', coordinates: pts}};
+  }
+  function mapStyle() {
+    return { version: 8, sources: { carto: { type:'raster',
+        tiles: ['https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png',
+                'https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png',
+                'https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png'],
+        tileSize: 256, attribution:'© CARTO © OpenStreetMap contributors' } },
+      layers: [{ id:'carto', type:'raster', source:'carto' }] };
+  }
 
   // ================= MAP =================
   const map = new maplibregl.Map({
@@ -341,7 +655,7 @@ function main([S, CD, NTA, HEX, PTS, CDGJ, NTAGJ]) {
   map.addControl(new maplibregl.NavigationControl({showCompass:false}), 'top-left');
   window._map = map;
 
-  let geo = 'hex', metric = 'count', year = 2026, playing = null;
+  let geo = 'hex', metric = 'count', year = CUR, playing = null;
   const yearSlider = document.getElementById('year-slider');
   const yearLabel = document.getElementById('year-label');
 
@@ -366,7 +680,7 @@ function main([S, CD, NTA, HEX, PTS, CDGJ, NTAGJ]) {
   CDGJ.features.forEach(f => { f.properties.id = String(f.properties.boro_cd); });
   NTAGJ.features.forEach(f => { f.properties.id = f.properties.nta2020; });
 
-  const JJ = (d, y) => d.janjul[String(y)] || 0;
+  const JJ = (d, y) => d.ytd[String(y)] || 0;
   function polyValue(id, d, met, y) {
     if (met === 'count') return geo==='cd' ? yearCount(d) : (d.yearly[String(y)] || 0);
     if (met === 'rate') { const n = geo==='cd' ? yearCount(d) : (d.yearly[String(y)]||0); return d.pop ? n/d.pop*10000 : null; }
@@ -430,13 +744,17 @@ function main([S, CD, NTA, HEX, PTS, CDGJ, NTAGJ]) {
   function renderLegend(rows) {
     const titles = {count: geo==='hex' ? `Sightings per block, ${yearText()}` : `Sightings, ${yearText()}`,
       rate:`Sightings per 10,000 residents, ${yearText()}`,
-      yoy:`Change, Jan.–Jul. ${year} vs. ${year-1}`, insp:`Inspections finding rat signs, ${yearText()}`};
+      yoy:`Change, ${YTD} ${year} vs. ${year-1}`, insp:`Inspections finding rat signs, ${yearText()}`};
     document.getElementById('legend').innerHTML = '<div class="lt">' +
-      (geo==='dots' ? 'Every sighting, Aug. 2025 – Jul. 2026' : titles[metric]) + '</div>' +
+      (geo==='dots' ? `Every sighting, ${monthName(S.recent_window[0])} \u2013 ${monthName(S.recent_window[1])}` : titles[metric]) + '</div>' +
       (geo==='dots' ? '<div class="lrow"><span class="sw" style="background:#e7466d;border-radius:50%"></span> One reported rat sighting</div>'
         : rows.map(r=>`<div class="lrow"><span class="sw" style="background:${r.c}"></span> ${r.t}</div>`).join(''));
   }
-  const yearText = () => year===2026 ? '2026 (through Aug. 4)' : String(year);
+  const yearText = () => year===CUR ? `${CUR} (through ${S.last_data_label.replace(/, \d{4}$/,'')})` : String(year);
+  function monthName(ym) {
+    const M = ['Jan.','Feb.','March','April','May','June','July','Aug.','Sept.','Oct.','Nov.','Dec.'];
+    return M[+ym.slice(5,7)-1] + ' ' + ym.slice(0,4);
+  }
 
   function paintHex() {
     const p = 'y'+year;
@@ -468,6 +786,44 @@ function main([S, CD, NTA, HEX, PTS, CDGJ, NTAGJ]) {
     refresh();
   });
 
+  // Containerization badges: appear over their district once the map reaches that year and
+  // flash on the year it happened, so the moment is visible while the animation plays.
+  const cMarkers = {};
+  function ringCentroid(feature) {
+    let ring = feature.geometry.type === 'Polygon' ? feature.geometry.coordinates[0]
+      : feature.geometry.coordinates.reduce((a,b) => (b[0].length > a.length ? b[0] : a), []);
+    let x = 0, y = 0;
+    ring.forEach(c => { x += c[0]; y += c[1]; });
+    return [x/ring.length, y/ring.length];
+  }
+  function updateContainerBadges() {
+    CONTAINERIZED.forEach(ev => {
+      const show = geo !== 'dots' && year >= ev.year;
+      let m = cMarkers[ev.cd];
+      if (!show) { if (m) { m.remove(); delete cMarkers[ev.cd]; } return; }
+      const isNew = year === ev.year;
+      if (!m) {
+        const feat = CDGJ.features.find(f => String(f.properties.boro_cd) === ev.cd);
+        if (!feat) return;
+        // MapLibre writes its own transform onto the marker element, so the badge that
+        // animates lives inside a wrapper the map is free to position.
+        const wrap = document.createElement('div');
+        wrap.className = 'cflash-wrap';
+        wrap.innerHTML = `<div class="cflash">${ev.name}<span class="cf-sub">${ev.sub}</span></div>`;
+        m = new maplibregl.Marker({element: wrap, anchor: 'bottom'})
+          .setLngLat(ringCentroid(feat)).addTo(map);
+        cMarkers[ev.cd] = m;
+      }
+      const el = m.getElement().firstElementChild;
+      el.classList.toggle('is-old', !isNew);
+      if (isNew) {
+        el.classList.remove('is-new'); void el.offsetWidth; el.classList.add('is-new');
+      } else {
+        el.classList.remove('is-new');
+      }
+    });
+  }
+
   function refresh() {
     if (!map.getSource('hex')) return;
     ['hex-fill'].forEach(l => map.setLayoutProperty(l,'visibility', geo==='hex'?'visible':'none'));
@@ -489,6 +845,7 @@ function main([S, CD, NTA, HEX, PTS, CDGJ, NTAGJ]) {
     yearSlider.disabled = yearDisabled;
     yearSlider.min = metric==='yoy' ? 2011 : 2010;
     yearLabel.textContent = yearDisabled ? '—' : (metric==='yoy' ? `’${String(year-1).slice(2)}→’${String(year).slice(2)}` : year);
+    updateContainerBadges();
     hideDetail();
   }
 
@@ -511,10 +868,10 @@ function main([S, CD, NTA, HEX, PTS, CDGJ, NTAGJ]) {
   document.getElementById('play').addEventListener('click', function() {
     if (playing) { clearInterval(playing); playing=null; this.textContent='▶'; return; }
     this.textContent='⏸';
-    let y = year >= 2026 ? (+yearSlider.min) : year;
+    let y = year >= CUR ? (+yearSlider.min) : year;
     playing = setInterval(() => {
       yearSlider.value = y; year = y; refresh();
-      if (y >= 2026) { clearInterval(playing); playing=null; document.getElementById('play').textContent='▶'; }
+      if (y >= CUR) { clearInterval(playing); playing=null; document.getElementById('play').textContent='\u25b6'; }
       y++;
     }, 900);
   });
@@ -549,7 +906,7 @@ function main([S, CD, NTA, HEX, PTS, CDGJ, NTAGJ]) {
       const vt = v==null ? 'insufficient data' :
         metric==='count' ? fmt(Math.round(v))+' sightings, '+yearText() :
         metric==='rate' ? v.toFixed(1)+' per 10k residents, '+yearText() :
-        metric==='yoy' ? pct(v,0)+` Jan.–Jul. ${year} vs. ${year-1}` :
+        metric==='yoy' ? pct(v,0)+` ${YTD} ${year} vs. ${year-1}` :
         v.toFixed(1)+'% of inspections found rat signs, '+yearText();
       showTip(e, `<div class="t-name">${name}</div><div class="t-val">${vt}</div>`);
     }
@@ -570,12 +927,12 @@ function main([S, CD, NTA, HEX, PTS, CDGJ, NTAGJ]) {
     const yearly = S.years.map(yr => geo==='nta' ? (d.yearly[String(yr)]||0)
       : months.reduce((a,m,i)=> a + (m.startsWith(String(yr)) ? d.monthly[i] : 0), 0));
     const cur = yearly[S.years.indexOf(year)] || 0;
-    const jjA = JJ(d, 2026), jjB = JJ(d, 2025);
-    const insp = d.insp[String(year===2026?2026:year)];
+    const jjA = JJ(d, CUR), jjB = JJ(d, PREV);
+    const insp = d.insp[String(year)];
     const stats = [
-      {n: fmt(cur), l: 'sightings, ' + (year===2026?'2026 YTD':year)},
+      {n: fmt(cur), l: 'sightings, ' + (year===CUR ? CUR+' to date' : year)},
       {n: d.pop ? (cur/d.pop*10000).toFixed(1) : '—', l: 'per 10k residents'},
-      {n: jjB>=5 ? pct((jjA/jjB-1)*100,0) : '—', l: 'Jan–Jul ’26 vs ’25'},
+      {n: jjB>=5 ? pct((jjA/jjB-1)*100,0) : '\u2014', l: `${YTD} \u2019${String(CUR).slice(2)} vs \u2019${String(PREV).slice(2)}`},
       {n: insp && insp[0]>=20 ? (insp[1]/insp[0]*100).toFixed(0)+'%' : '—', l: 'inspections w/ rat signs'}
     ];
     // sparkline
@@ -592,7 +949,7 @@ function main([S, CD, NTA, HEX, PTS, CDGJ, NTAGJ]) {
       <div class="d-sub">${geo==='nta' ? d.borough : ''} ${d.pop ? '· pop. '+fmt(d.pop) : '· park/airport area'}</div>
       <div class="d-stats">${stats.map(s=>`<div class="d-stat"><div class="n">${s.n}</div><div class="l">${s.l}</div></div>`).join('')}</div>
       <div class="d-spark"><svg viewBox="0 0 ${w} ${h}" width="100%">${bars}</svg>
-      <div class="d-spark-cap">Sightings per year, 2010–2026 (orange = selected year)</div></div>`;
+      <div class="d-spark-cap">Sightings per year, 2010\u2013${CUR} (orange = selected year)</div></div>`;
     detail.style.display='block';
   });
 }
