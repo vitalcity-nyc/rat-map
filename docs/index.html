@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Where the rats are | Vital City</title>
+<meta name="description" content="Every rat sighting reported to New York City's 311 line since 2010, mapped block by block and checked against health department inspections.">
+<link rel="stylesheet" href="https://use.typekit.net/qqk2vto.css">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐀</text></svg>">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="wordmark" href="https://www.vitalcitynyc.org">VITAL CITY</a>
+    <span class="topbar-tag">Data</span>
+  </div>
+</header>
+
+<section class="hero">
+  <h1>Where the rats are</h1>
+  <p class="dek">Every rat sighting reported to 311 since 2010 — nearly 290,000 of them — mapped block by block, and checked against what health inspectors actually found on the ground.</p>
+  <p class="meta"><b>By Vital City</b> · Data through <span id="data-through">…</span> · Updated August 5, 2026</p>
+</section>
+
+<div class="kpis" id="kpis"></div>
+
+<!-- MAP -->
+<section class="section" id="map-section">
+  <h2>The rat map: sightings down almost everywhere, but the map is not moving in unison</h2>
+  <p class="chart-dek">Choose a geography and a measure. Blocks show raw 311 sighting counts on a ~220-meter grid; neighborhoods and community districts add rates, year-over-year change and inspection results. Click any area for its full history.</p>
+  <div class="controls">
+    <div class="ctl-group">
+      <span class="ctl-label">View</span>
+      <span class="seg" id="geo-seg">
+        <button data-geo="hex" class="on">Blocks</button>
+        <button data-geo="nta">Neighborhoods</button>
+        <button data-geo="cd">Community districts</button>
+        <button data-geo="dots">Every sighting</button>
+      </span>
+    </div>
+    <div class="ctl-group">
+      <span class="ctl-label">Measure</span>
+      <span class="seg" id="metric-seg">
+        <button data-metric="count" class="on">Sightings</button>
+        <button data-metric="rate">Per 10k residents</button>
+        <button data-metric="yoy">Change vs. prior year</button>
+        <button data-metric="insp">Inspection failures</button>
+      </span>
+    </div>
+    <div class="ctl-group yearctl" id="year-ctl">
+      <span class="ctl-label">Year</span>
+      <button class="playbtn" id="play" title="Animate through the years">▶</button>
+      <input type="range" id="year-slider" min="2010" max="2026" step="1" value="2026">
+      <span class="yr" id="year-label">2026</span>
+    </div>
+  </div>
+  <div class="map-shell">
+    <div id="map"></div>
+    <div class="legend" id="legend"></div>
+    <div class="map-tip" id="map-tip"></div>
+    <div class="detail" id="detail"></div>
+  </div>
+  <p class="source">Source: <a href="https://data.cityofnewyork.us/Social-Services/311-Service-Requests-from-2010-to-2019/76ig-c548">311 Service Requests 2010–2019</a> and <a href="https://data.cityofnewyork.us/Social-Services/311-Service-Requests-from-2020-to-Present/erm2-nwe9">2020–present</a> (complaint type "Rodent," descriptor "Rat Sighting"); <a href="https://data.cityofnewyork.us/Health/Rodent-Inspection/p937-wjvj">DOHMH Rodent Inspection</a>; NYC Open Data, accessed Aug. 5, 2026. 2026 covers Jan. 1–Aug. 4. Basemap © <a href="https://carto.com/attributions">CARTO</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors.</p>
+</section>
+
+<!-- TREND -->
+<section class="section">
+  <h2 id="trend-headline">Rat sightings are falling at the fastest rate on record</h2>
+  <p class="chart-dek">Monthly rat sightings reported to 311, January 2010 through July 2026, with the city's major anti-rat policy changes marked.</p>
+  <div class="mini-toggles">
+    <span class="seg" id="trend-seg">
+      <button data-view="city" class="on">Citywide</button>
+      <button data-view="boro">By borough</button>
+    </span>
+    <label class="chk" id="rate-toggle-wrap" style="display:none"><input type="checkbox" id="rate-toggle"> Per 100,000 residents (2020 census)</label>
+  </div>
+  <div class="chart-wrap" id="trend-chart"></div>
+  <p class="source">Source: <a href="https://data.cityofnewyork.us/Social-Services/311-Service-Requests-from-2010-to-2019/76ig-c548">311 Service Requests 2010–2019</a> and <a href="https://data.cityofnewyork.us/Social-Services/311-Service-Requests-from-2020-to-Present/erm2-nwe9">2020–present</a>, NYC Open Data, accessed Aug. 5, 2026. Borough view shows 12-month rolling averages. Policy dates verified against <a href="https://www.nyc.gov/mayors-office/news/2023/04/mayor-adams-anoints-kathleen-corradi-nyc-s-first-ever-rat-czar">City Hall</a> and <a href="https://www.nyc.gov/site/dsny/collection/containerization/residential-containerization.page">DSNY</a> announcements.</p>
+</section>
+
+<!-- INSPECTIONS -->
+<section class="section">
+  <h2>Health inspectors are finding rats less often, too — evidence the decline is not just fewer phone calls</h2>
+  <p class="chart-dek">311 sightings reflect who bothers to report. As an independent check: the share of the health department's initial rodent inspections that found active rat signs, by year.</p>
+  <div class="chart-wrap" id="insp-chart"></div>
+  <p class="source">Source: <a href="https://data.cityofnewyork.us/Health/Rodent-Inspection/p937-wjvj">DOHMH Rodent Inspection</a> (initial inspections only) and 311 Service Requests, NYC Open Data, accessed Aug. 5, 2026. "Found rat signs" combines results "Failed for Rat Activity" and "Failed for Rat Activity and Other Reason." 2026 is Jan. 1–Aug. 4.</p>
+</section>
+
+<!-- SEASONALITY + HOUR -->
+<section class="section">
+  <div class="two-col">
+    <div>
+      <h2>Rat season peaks in July</h2>
+      <p class="chart-dek">Average 311 rat sightings per calendar month, 2010–2025.</p>
+      <div class="chart-wrap" id="season-chart"></div>
+    </div>
+    <div>
+      <h2>New York reports its rats in the late morning</h2>
+      <p class="chart-dek">Sightings by hour the report was filed, 2010–2026. Date-only records (no timestamp) are excluded.</p>
+      <div class="chart-wrap" id="hour-chart"></div>
+    </div>
+  </div>
+  <p class="source">Source: 311 Service Requests (<a href="https://data.cityofnewyork.us/Social-Services/311-Service-Requests-from-2010-to-2019/76ig-c548">2010–2019</a>, <a href="https://data.cityofnewyork.us/Social-Services/311-Service-Requests-from-2020-to-Present/erm2-nwe9">2020–present</a>), NYC Open Data, accessed Aug. 5, 2026. Times are local. <span id="midnight-note"></span></p>
+</section>
+
+<!-- HEAT CALENDAR -->
+<section class="section">
+  <h2>Seventeen years of rat reports, month by month</h2>
+  <p class="chart-dek">Every month since January 2010, shaded by the number of rat sightings reported. Read across for seasons; read down for eras.</p>
+  <div class="chart-wrap" id="calendar-chart"></div>
+  <p class="source">Source: 311 Service Requests, NYC Open Data, accessed Aug. 5, 2026. 2026 shown through July.</p>
+</section>
+
+<!-- LOCATION TYPES -->
+<section class="section">
+  <h2>The rat problem is mostly an apartment-building problem</h2>
+  <p class="chart-dek">Share of 311 rat sightings by the type of location reported, by year. Larger residential buildings (3+ families) account for about half of all sightings once mixed-use buildings are counted.</p>
+  <div class="chart-wrap" id="loctype-chart"></div>
+  <p class="source">Source: 311 Service Requests, NYC Open Data, accessed Aug. 5, 2026. Location type is self-reported by the caller.</p>
+</section>
+
+<!-- CHRONIC + RANKINGS -->
+<section class="section">
+  <div class="two-col">
+    <div>
+      <h2>The most rat-reported addresses</h2>
+      <p class="chart-dek">Single addresses with the most 311 rat sightings over the last three years (August 2023 – July 2026).</p>
+      <table class="tbl" id="chronic-tbl"></table>
+    </div>
+    <div>
+      <h2>Where sightings run highest per resident</h2>
+      <p class="chart-dek">Neighborhoods with the most Jan.–Jul. 2026 sightings per 10,000 residents (residential neighborhoods with at least 5,000 people).</p>
+      <table class="tbl" id="rank-tbl"></table>
+    </div>
+  </div>
+  <p class="source">Source: 311 Service Requests, NYC Open Data, accessed Aug. 5, 2026. Repeated reports may reflect one persistent condition, one persistent caller, or both; addresses are as entered by callers. Neighborhood populations are 2020 census counts for 2020 Neighborhood Tabulation Areas.</p>
+</section>
+
+<!-- METHODOLOGY -->
+<div class="methodology" id="methodology">
+  <div class="methodology-inner">
+    <h2>How we did this</h2>
+    <h3>Sources</h3>
+    <p>All data come from <a href="https://opendata.cityofnewyork.us/">NYC Open Data</a>, accessed August 5, 2026: <a href="https://data.cityofnewyork.us/Social-Services/311-Service-Requests-from-2010-to-2019/76ig-c548">311 Service Requests from 2010 to 2019</a> (140,816 rat sightings) and <a href="https://data.cityofnewyork.us/Social-Services/311-Service-Requests-from-2020-to-Present/erm2-nwe9">311 Service Requests from 2020 to Present</a> (148,476 rat sightings through August 4, 2026), filtered to complaint type "Rodent" with descriptor "Rat Sighting"; the <a href="https://data.cityofnewyork.us/Health/Rodent-Inspection/p937-wjvj">DOHMH Rodent Inspection</a> dataset (2,118,653 initial inspections); <a href="https://data.cityofnewyork.us/City-Government/Community-Districts/5crt-au7u">Community District</a> and <a href="https://data.cityofnewyork.us/City-Government/2020-Neighborhood-Tabulation-Areas-NTAs-/9nt8-h7nd">2020 Neighborhood Tabulation Area</a> boundaries (shoreline-clipped); and the Department of City Planning's <a href="https://www.nyc.gov/content/planning/pages/resources/datasets/decennial-census">2020 decennial census tables</a> for populations.</p>
+    <h3>Calculations</h3>
+    <p>The block-level map aggregates sighting coordinates to a rectangular grid of roughly 220 meters on a side (0.002° latitude by 0.0026° longitude); 0.9% of sightings lack usable coordinates and are excluded from maps but included in citywide counts. Year-over-year change compares January–July windows so the partial year 2026 is compared fairly against the same months of 2025. Rates divide sighting counts by 2020 census populations (held constant across years) and are shown per 10,000 residents for neighborhoods and districts, per 100,000 for boroughs. "Inspection failures" is the share of the health department's <em>initial</em> rodent inspections — excluding follow-up compliance visits and treatments — whose result was "Failed for Rat Activity" or "Failed for Rat Activity and Other Reason." Inspections with impossible dates (before 2010 or in the future; 16,522 records, 0.8%) and inspections without usable coordinates (29,414, 1.4%, for map views only) are excluded. The borough trend view uses 12-month rolling averages to smooth seasonal swings. The hour-of-day chart excludes 119,649 records (41%) stamped exactly midnight, which are date-only entries.</p>
+    <h3>Limitations</h3>
+    <p>311 sightings measure reporting, not rats: neighborhoods differ in their propensity to call, and campaigns or news coverage can move the numbers independent of the rodent population. That is why the inspection failure rate is shown alongside them — it is drawn from inspector observations rather than complaints, though inspections themselves are partly complaint-driven, so the two measures are not fully independent. The community-district assignment uses the district recorded by 311, which is missing or unspecified for about 10% of records overall, concentrated in 2014–2018 (up to a few percent of those years' records); district-level counts for those years are slight undercounts. Neighborhood assignment is by point-in-polygon on reported coordinates. Census populations are protected by the Census Bureau's differential-privacy noise; small-area counts carry some uncertainty. One address generating many reports may reflect one persistent condition or one persistent caller.</p>
+    <h3>Reproducibility</h3>
+    <p>The fetch and aggregation scripts, with expected row counts asserted at every step, are in the <a id="repo-link" href="https://github.com/vitalcity-nyc/rat-map">project repository</a>. Every number on this page is produced by <code>scripts/aggregate.py</code> from the raw downloads.</p>
+    <p class="ai-note">This project was built with AI assistance (Claude). All figures come directly from the cited public datasets via the scripts in the repository, but as with any automated analysis, please verify numbers against the sources before republishing.</p>
+  </div>
+</div>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <a class="wordmark" href="https://www.vitalcitynyc.org">VITAL CITY</a>
+    <div class="f-links">
+      <a href="#methodology">Methodology</a>
+      <a href="https://www.vitalcitynyc.org">vitalcitynyc.org</a>
+    </div>
+  </div>
+</footer>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
